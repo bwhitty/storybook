@@ -57,7 +57,44 @@ export default class StoryPanel extends Component {
     this.selectedStoryRef = ref;
   };
 
-  listener = ({ source, currentLocation, locationsMap }) => {
+  listener = params => {
+    if (params.source) {
+      this.changeFocus(params);
+    } else if (params.newSource && params.location) {
+      this.updateSource(params);
+    }
+  };
+
+  updateSource = ({ newSource }) => {
+    const {
+      source,
+      currentLocation: {
+        startLoc: { line: startLocLine, col: startLocCol },
+        endLoc: { line: endLocLine, col: endLocCol },
+      },
+    } = this.state;
+    const sourceLines = source.split('\n');
+    const newFileSource =
+      sourceLines.slice(0, Math.max(0, startLocLine - 2)).join('\n') +
+      (startLocLine === 0 ? '' : '\n') +
+      sourceLines[startLocLine - 1].substring(0, startLocCol) +
+      newSource +
+      sourceLines[endLocLine - 1].substring(endLocCol) +
+      sourceLines.slice(Math.min(sourceLines.length - 1, endLocLine));
+
+    const newEndLocLine = startLocLine + newSource.split('\n').length - 1;
+    const newEndLocCol = newSource.split('\n').slice(-1).length;
+
+    this.setState({
+      source: newFileSource,
+      currentLocation: {
+        startLoc: { col: startLocCol, line: startLocLine },
+        endLoc: { col: newEndLocCol, line: newEndLocLine },
+      },
+    });
+  };
+
+  changeFocus = ({ source, currentLocation, locationsMap }) => {
     const locationsKeys = getLocationKeys(locationsMap);
 
     this.setState({
@@ -86,6 +123,11 @@ export default class StoryPanel extends Component {
       })
     );
 
+  onEdit = (e, newSource, location) => {
+    const { channel } = this.props;
+    channel.emit(EVENT_ID, { newSource, location });
+  };
+
   createStoryPart = (rows, stylesheet, useInlineStyles, location, kindStory) => {
     const { currentLocation } = this.state;
     const first = location.startLoc.line - 1;
@@ -97,7 +139,15 @@ export default class StoryPanel extends Component {
 
     if (areLocationsEqual(location, currentLocation)) {
       return (
-        <div key={storyKey} ref={this.setSelectedStoryRef} style={styles.selectedStory}>
+        <div
+          key={storyKey}
+          ref={this.setSelectedStoryRef}
+          style={styles.selectedStory}
+          contentEditable
+          role="textbox"
+          tabIndex="0"
+          onKeyUp={event => this.onEdit(event, event.currentTarget.innerText, location)}
+        >
           {story}
         </div>
       );
